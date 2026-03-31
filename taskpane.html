@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reconciliation Finder</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue:       #0078d4;
+      --blue-dk:    #106ebe;
+      --blue-lt:    #deecf9;
+      --blue-xlt:   #f0f6fc;
+      --green:      #107c10;
+      --green-lt:   #dff6dd;
+      --red:        #a4262c;
+      --red-lt:     #fde7e9;
+      --text-1:     #201f1e;
+      --text-2:     #605e5c;
+      --text-3:     #a19f9d;
+      --border:     #edebe9;
+      --border-2:   #d2d0ce;
+      --bg:         #ffffff;
+      --surf:       #faf9f8;
+      --surf-2:     #f3f2f1;
+    }
+    body { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 13px; background: var(--bg); color: var(--text-1); line-height: 1.4; }
+
+    /* Header */
+    .hdr { background: var(--blue); padding: 11px 14px; display: flex; align-items: center; gap: 9px; }
+    .hdr-icon { width: 18px; height: 18px; background: rgba(255,255,255,0.22); border-radius: 3px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .hdr h1 { font-size: 13px; font-weight: 600; color: #fff; }
+    .hdr p { font-size: 11px; color: rgba(255,255,255,0.7); margin-top: 1px; }
+
+    /* Body */
+    .body { padding: 14px; }
+
+    /* Field */
+    .field { margin-bottom: 14px; }
+    .lbl { display: block; font-size: 11px; font-weight: 600; color: var(--text-2); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* Target row */
+    .t-row { display: flex; gap: 6px; align-items: stretch; }
+    .t-input { flex: 1; border: 1px solid var(--border-2); border-radius: 3px; padding: 7px 10px; font-family: 'Inter', sans-serif; font-size: 18px; font-weight: 600; color: var(--text-1); outline: none; text-align: right; background: var(--bg); transition: border-color 0.15s; min-width: 0; }
+    .t-input::placeholder { color: var(--text-3); font-weight: 400; font-size: 14px; }
+    .t-input:focus { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+
+    /* Pick buttons */
+    .pick-btn { flex-shrink: 0; border: 1px solid var(--border-2); border-radius: 3px; background: var(--surf); color: var(--text-2); font-size: 11px; font-weight: 500; font-family: 'Inter', sans-serif; padding: 0 10px; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all 0.15s; white-space: nowrap; }
+    .pick-btn:hover { background: var(--surf-2); color: var(--text-1); }
+    .pick-btn.active { background: var(--blue-lt); border-color: var(--blue); color: var(--blue-dk); animation: pb 1.2s ease-in-out infinite; }
+    @keyframes pb { 0%,100%{box-shadow:0 0 0 0 rgba(0,120,212,.28)} 50%{box-shadow:0 0 0 3px rgba(0,120,212,.1)} }
+
+    /* Hint strip */
+    .hint { font-size: 11px; color: var(--blue-dk); background: var(--blue-xlt); border: 1px solid var(--blue-lt); border-radius: 3px; padding: 5px 9px; margin-top: 5px; display: none; }
+    .hint.on { display: block; }
+
+    /* Range bar */
+    .rng-bar { border: 1px solid var(--border-2); border-radius: 3px; overflow: hidden; }
+    .rng-top { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; background: var(--surf); border-bottom: 1px solid var(--border); gap: 8px; }
+    .rng-addr { font-size: 12px; font-weight: 500; color: var(--text-1); font-family: Consolas, monospace; }
+    .rng-addr.empty { color: var(--text-3); font-weight: 400; font-family: 'Inter', sans-serif; }
+    .rng-ct { font-size: 11px; color: var(--text-3); }
+    .sel-btn { border: 1px solid var(--blue); border-radius: 2px; background: var(--blue-xlt); color: var(--blue-dk); font-size: 11px; font-weight: 500; font-family: 'Inter', sans-serif; padding: 4px 9px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+    .sel-btn:hover { background: var(--blue-lt); }
+    .sel-btn.active { background: var(--blue); color: #fff; animation: pb 1.2s ease-in-out infinite; }
+    .rng-prev { padding: 7px 10px; font-family: Consolas, monospace; font-size: 11px; color: var(--text-2); background: var(--bg); max-height: 80px; overflow-y: auto; line-height: 1.7; display: none; }
+    .rng-prev.on { display: block; }
+
+    /* Confirm btn */
+    .confirm-btn { width: 100%; padding: 9px; background: var(--green); border: none; border-radius: 3px; color: #fff; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; margin-bottom: 10px; display: none; transition: background 0.15s; }
+    .confirm-btn:hover { background: #0e6b0e; }
+
+    /* Divider */
+    .div { height: 1px; background: var(--border); margin: 14px 0; }
+
+    /* Solve */
+    .solve-btn { width: 100%; padding: 10px; background: var(--blue); border: none; border-radius: 3px; color: #fff; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+    .solve-btn:hover:not(:disabled) { background: var(--blue-dk); }
+    .solve-btn:disabled { background: var(--surf-2); color: var(--text-3); cursor: not-allowed; }
+
+    /* Banners */
+    .ban { border-radius: 3px; padding: 7px 10px; font-size: 12px; margin-bottom: 10px; display: none; line-height: 1.4; }
+    .ban.on { display: block; }
+    .ban.warn { background: #fff4ce; border: 1px solid #c8a600; color: #5a5200; }
+    .ban.err  { background: var(--red-lt); border: 1px solid #f1c4c7; color: var(--red); }
+    .ban.info { background: var(--blue-xlt); border: 1px solid var(--blue-lt); color: var(--blue-dk); }
+
+    /* Filter bar */
+    .flt-bar { display: none; align-items: center; justify-content: space-between; background: var(--green-lt); border: 1px solid #b7dfb4; border-radius: 3px; padding: 7px 10px; margin-top: 12px; font-size: 12px; color: var(--green); font-weight: 500; }
+    .flt-bar.on { display: flex; }
+    .flt-bar button { border: 1px solid #a0c89e; background: #c7e8c5; color: var(--green); border-radius: 2px; font-size: 11px; font-weight: 500; font-family: 'Inter', sans-serif; padding: 3px 8px; cursor: pointer; }
+    .flt-bar button:hover { background: #b3deb0; }
+
+    /* Results */
+    .res { margin-top: 14px; }
+    .res-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .res-lbl { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-2); }
+    .res-badge { background: var(--blue-lt); color: var(--blue-dk); font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 10px; }
+
+    /* No result */
+    .nores { border: 1px solid var(--border); border-radius: 3px; padding: 18px 14px; text-align: center; background: var(--surf); }
+    .nores-icon { font-size: 20px; margin-bottom: 6px; }
+    .nores-t { font-size: 13px; font-weight: 600; color: var(--red); margin-bottom: 4px; }
+    .nores-s { font-size: 12px; color: var(--text-2); line-height: 1.4; }
+
+    /* Solution card */
+    .sol { border: 1px solid var(--border); border-radius: 3px; margin-bottom: 8px; overflow: hidden; animation: fi 0.2s ease forwards; opacity: 0; }
+    @keyframes fi { to { opacity: 1; } }
+    .sol-hd { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; background: var(--surf); border-bottom: 1px solid var(--border); }
+    .sol-num { font-size: 11px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.5px; }
+    .sol-chips { display: flex; gap: 4px; }
+    .chip { font-size: 10px; padding: 2px 6px; border-radius: 2px; font-weight: 500; }
+    .chip.a { background: var(--green-lt); color: var(--green); }
+    .chip.s { background: var(--red-lt); color: var(--red); }
+    .chip.c { background: var(--surf-2); color: var(--text-2); }
+    .sol-bd { padding: 10px; }
+    .eq { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 9px; }
+    .en { font-family: Consolas, monospace; font-size: 12px; font-weight: 600; padding: 3px 7px; border-radius: 2px; }
+    .en.p { background: var(--green-lt); color: var(--green); border: 1px solid #b7dfb4; }
+    .en.n { background: var(--red-lt); color: var(--red); border: 1px solid #f1c4c7; }
+    .eo { font-size: 13px; font-weight: 500; color: var(--text-3); }
+    .ee { font-size: 12px; color: var(--text-3); margin: 0 2px; }
+    .et { font-family: Consolas, monospace; font-size: 13px; font-weight: 600; color: var(--blue-dk); background: var(--blue-xlt); border: 1px solid var(--blue-lt); padding: 3px 8px; border-radius: 2px; }
+    .act-row { display: flex; gap: 6px; }
+    .act { flex: 1; padding: 6px 8px; border-radius: 2px; font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .act.prim { background: var(--blue-xlt); border: 1px solid var(--blue-lt); color: var(--blue-dk); }
+    .act.prim:hover { background: var(--blue-lt); }
+    .act.sec { background: var(--surf); border: 1px solid var(--border); color: var(--text-2); }
+    .act.sec:hover { background: var(--surf-2); }
+
+    /* Loading */
+    .loading { text-align: center; padding: 24px 14px; color: var(--text-3); font-size: 12px; }
+    .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border-2); border-top-color: var(--blue); border-radius: 50%; animation: sp 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
+    @keyframes sp { to { transform: rotate(360deg); } }
+
+    .timeout-note { font-size: 11px; color: var(--text-3); text-align: center; margin-top: 8px; display: none; }
+  </style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-icon">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <rect x="1" y="1" width="4" height="4" rx="0.5" fill="white" opacity="0.9"/>
+      <rect x="7" y="1" width="4" height="4" rx="0.5" fill="white" opacity="0.9"/>
+      <rect x="1" y="7" width="4" height="4" rx="0.5" fill="white" opacity="0.5"/>
+      <rect x="7" y="7" width="4" height="4" rx="0.5" fill="white" opacity="0.9"/>
+    </svg>
+  </div>
+  <div>
+    <h1>Reconciliation Finder</h1>
+    <p>Find entries that sum to a target amount</p>
+  </div>
+</div>
+
+<div class="body">
+
+  <!-- Target -->
+  <div class="field">
+    <label class="lbl">Target amount</label>
+    <div class="t-row">
+      <input class="t-input" type="text" id="target" placeholder="0.00" autocomplete="off" />
+      <button class="pick-btn" id="pickTargetBtn">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+          <circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.3"/>
+          <circle cx="6" cy="6" r="1.8" fill="currentColor"/>
+          <line x1="6" y1="0.5" x2="6" y2="3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          <line x1="6" y1="9" x2="6" y2="11.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          <line x1="0.5" y1="6" x2="3" y2="6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          <line x1="9" y1="6" x2="11.5" y2="6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        Pick cell
+      </button>
+    </div>
+    <div class="hint" id="targetHint">Click any cell in your spreadsheet to use its value as the target amount</div>
+  </div>
+
+  <!-- Source range -->
+  <div class="field">
+    <label class="lbl">Source entries</label>
+    <div class="rng-bar">
+      <div class="rng-top">
+        <div>
+          <div class="rng-addr empty" id="rngAddr">No range selected</div>
+          <div class="rng-ct" id="rngCt"></div>
+        </div>
+        <button class="sel-btn" id="selectRangeBtn">Select range in Excel</button>
+      </div>
+      <div class="rng-prev" id="rngPrev"></div>
+    </div>
+    <div class="hint" id="rangeHint">Select a column of values in your spreadsheet, then click Confirm below</div>
+  </div>
+
+  <button class="confirm-btn" id="confirmBtn">✓ Confirm selection</button>
+
+  <div class="ban warn" id="warnBan"></div>
+  <div class="ban err"  id="errBan"></div>
+  <div class="ban info" id="infoBan"></div>
+
+  <button class="solve-btn" id="solveBtn" disabled>Find combinations</button>
+
+  <div class="flt-bar" id="fltBar">
+    <span id="fltLbl">Filter active</span>
+    <button onclick="clearFilter()">✕ Clear filter</button>
+  </div>
+
+  <div class="res" id="results"></div>
+  <div class="timeout-note" id="timeoutNote">Search stopped after time limit — partial results shown</div>
+
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────
+var parsedNumbers  = [];
+var sourceRowStart = -1;
+var sourceColIndex = -1;
+var sourceRowCount = 0;
+var sourceAddress  = '';
+var pickMode       = null;   // 'target' | 'range' | null
+var pendingConfirm = null;   // data for the pending range confirm
+var lastResults    = null;
+
+// ── Office init ──────────────────────────────────────────────────
+Office.onReady(function(info) {
+  if (info.host !== Office.HostType.Excel) {
+    showBan('info', 'This add-in is designed for Microsoft Excel.');
+    return;
+  }
+  // Register persistent selection handler
+  Excel.run(function(ctx) {
+    ctx.workbook.onSelectionChanged.add(onSelectionChanged);
+    return ctx.sync();
+  }).catch(function(){});
+
+  id('pickTargetBtn').addEventListener('click', togglePickTarget);
+  id('selectRangeBtn').addEventListener('click', togglePickRange);
+  id('confirmBtn').addEventListener('click', doConfirmRange);
+  id('target').addEventListener('input', function(){ updateSolveBtn(); clearBans(); });
+  id('solveBtn').addEventListener('click', solve);
+});
+
+function id(s) { return document.getElementById(s); }
+
+// ── Selection changed ────────────────────────────────────────────
+function onSelectionChanged() {
+  if (!pickMode) return;
+  Excel.run(function(ctx) {
+    var rng = ctx.workbook.getSelectedRange();
+    rng.load(['values','cellCount','address','rowIndex','columnIndex','rowCount']);
+    return ctx.sync().then(function() {
+
+      if (pickMode === 'target') {
+        if (rng.cellCount !== 1) return;
+        var v = rng.values[0][0];
+        if (v === null || v === '' || isNaN(parseFloat(v))) return;
+        id('target').value = fmtN(parseFloat(v));
+        exitPickMode();
+        updateSolveBtn();
+
+      } else if (pickMode === 'range') {
+        var nums = rng.values.flat().filter(function(v){ return v !== null && v !== '' && !isNaN(parseFloat(v)); });
+        if (nums.length === 0) return;
+        // Store pending
+        pendingConfirm = {
+          address:  rng.address,
+          rowIndex: rng.rowIndex,
+          colIndex: rng.columnIndex,
+          rowCount: rng.rowCount,
+          values:   rng.values.map(function(r){ return r[0]; })
+        };
+        var btn = id('confirmBtn');
+        btn.textContent = '✓ Confirm ' + nums.length + ' value' + (nums.length !== 1 ? 's' : '') + '  (' + rng.address + ')';
+        btn.style.display = 'block';
+      }
+    });
+  }).catch(function(){});
+}
+
+// ── Confirm range ────────────────────────────────────────────────
+function doConfirmRange() {
+  if (!pendingConfirm) return;
+  var raw = pendingConfirm.values.map(function(v){ return parseFloat(v); }).filter(function(v){ return !isNaN(v); });
+  parsedNumbers  = raw;
+  sourceAddress  = pendingConfirm.address;
+  sourceRowStart = pendingConfirm.rowIndex;
+  sourceColIndex = pendingConfirm.colIndex;
+  sourceRowCount = pendingConfirm.rowCount;
+  pendingConfirm = null;
+
+  id('rngAddr').textContent = sourceAddress;
+  id('rngAddr').classList.remove('empty');
+  id('rngCt').textContent = parsedNumbers.length + ' values · sum = ' + fmt(parsedNumbers.reduce(function(a,b){return a+b;},0));
+
+  var preview = parsedNumbers.slice(0,15).map(fmt).join(',  ') + (parsedNumbers.length > 15 ? ',  …' : '');
+  id('rngPrev').textContent = preview;
+  id('rngPrev').classList.add('on');
+
+  exitPickMode();
+  updateSolveBtn();
+  clearBans();
+}
+
+// ── Pick modes ───────────────────────────────────────────────────
+function togglePickTarget() {
+  if (pickMode === 'target') { exitPickMode(); return; }
+  pickMode = 'target';
+  id('pickTargetBtn').classList.add('active');
+  id('pickTargetBtn').textContent = '✕ Cancel';
+  id('targetHint').classList.add('on');
+  id('selectRangeBtn').classList.remove('active');
+  id('selectRangeBtn').textContent = 'Select range in Excel';
+  id('rangeHint').classList.remove('on');
+  id('confirmBtn').style.display = 'none';
+}
+
+function togglePickRange() {
+  if (pickMode === 'range') { exitPickMode(); return; }
+  pickMode = 'range';
+  id('selectRangeBtn').classList.add('active');
+  id('selectRangeBtn').textContent = '✕ Cancel selection';
+  id('rangeHint').classList.add('on');
+  id('confirmBtn').style.display = 'none';
+  id('pickTargetBtn').classList.remove('active');
+  id('pickTargetBtn').textContent = 'Pick cell';
+  id('targetHint').classList.remove('on');
+}
+
+function exitPickMode() {
+  pickMode = null;
+  var tb = id('pickTargetBtn');
+  tb.classList.remove('active');
+  tb.textContent = 'Pick cell';
+  id('targetHint').classList.remove('on');
+  id('selectRangeBtn').classList.remove('active');
+  id('selectRangeBtn').textContent = 'Select range in Excel';
+  id('rangeHint').classList.remove('on');
+  id('confirmBtn').style.display = 'none';
+}
+
+// ── Formatting ───────────────────────────────────────────────────
+function fmt(n) { return n.toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtN(n) { return n.toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+// ── Banners ──────────────────────────────────────────────────────
+function showBan(type, msg) {
+  clearBans();
+  var el = id(type === 'warn' ? 'warnBan' : type === 'err' ? 'errBan' : 'infoBan');
+  el.textContent = msg;
+  el.classList.add('on');
+}
+function clearBans() { ['warnBan','errBan','infoBan'].forEach(function(x){ id(x).classList.remove('on'); }); }
+
+// ── Update solve button ──────────────────────────────────────────
+function updateSolveBtn() {
+  var t = parseFloat(id('target').value.replace(/[,£$€\s]/g,''));
+  id('solveBtn').disabled = isNaN(t) || parsedNumbers.length === 0;
+}
+
+// ── Algorithm ────────────────────────────────────────────────────
+function findCombinations(target, numbers, maxSol) {
+  maxSol = maxSol || 50;
+  var SCALE      = 100;
+  var targetInt  = Math.round(target * SCALE);
+  var numsInt    = numbers.map(function(n){ return Math.round(n * SCALE); });
+  var solutions  = [];
+  var startTime  = Date.now();
+  var TIME_LIMIT = 9000;
+  var aborted    = false;
+  var iters      = 0;
+
+  // Suffix absolute sum for pruning
+  var sfx = new Array(numsInt.length + 1).fill(0);
+  for (var i = numsInt.length - 1; i >= 0; i--) {
+    sfx[i] = sfx[i+1] + Math.abs(numsInt[i]);
+  }
+
+  function bt(idx, cur, chosen) {
+    if (aborted || solutions.length >= maxSol) return;
+    if (cur === targetInt && chosen.length > 0) { solutions.push(chosen.slice()); return; }
+    if (idx >= numsInt.length) return;
+    var reach = sfx[idx];
+    if (targetInt > cur + reach || targetInt < cur - reach) return;
+    if (++iters % 50000 === 0 && Date.now() - startTime > TIME_LIMIT) { aborted = true; return; }
+
+    chosen.push({index: idx, sign: 1});
+    bt(idx+1, cur + numsInt[idx], chosen);
+    chosen.pop();
+    if (aborted) return;
+
+    if (numsInt[idx] !== 0) {
+      chosen.push({index: idx, sign: -1});
+      bt(idx+1, cur - numsInt[idx], chosen);
+      chosen.pop();
+      if (aborted) return;
+    }
+
+    bt(idx+1, cur, chosen);
+  }
+
+  bt(0, 0, []);
+  return {solutions: solutions, aborted: aborted};
+}
+
+// ── Solve ────────────────────────────────────────────────────────
+function solve() {
+  var raw = id('target').value.replace(/[,£$€\s]/g,'');
+  var t   = parseFloat(raw);
+  if (isNaN(t)) { showBan('err', 'Please enter a valid target amount.'); return; }
+  if (parsedNumbers.length === 0) { showBan('err', 'Please select a source range first.'); return; }
+  clearBans();
+  if (parsedNumbers.length > 50) {
+    showBan('warn', 'Searching ' + parsedNumbers.length + ' entries — this may take a few seconds for large datasets.');
+  }
+  id('results').innerHTML = '<div class="loading"><span class="spin"></span>Searching combinations…</div>';
+  id('solveBtn').disabled = true;
+  id('timeoutNote').style.display = 'none';
+
+  setTimeout(function() {
+    var res = findCombinations(t, parsedNumbers);
+    lastResults = {target: t, solutions: res.solutions};
+    if (res.aborted) id('timeoutNote').style.display = 'block';
+    renderResults(t, res.solutions);
+    id('solveBtn').disabled = false;
+    clearBans();
+  }, 20);
+}
+
+// ── Render ───────────────────────────────────────────────────────
+function renderResults(target, solutions) {
+  var el = id('results');
+  if (solutions.length === 0) {
+    el.innerHTML = '<div class="res-hdr"><span class="res-lbl">Result</span></div>' +
+      '<div class="nores"><div class="nores-icon">∅</div>' +
+      '<div class="nores-t">No match for ' + fmt(target) + '</div>' +
+      '<div class="nores-s">No combination of the selected entries equals this amount.</div></div>';
+    return;
+  }
+  var html = '<div class="res-hdr"><span class="res-lbl">Combinations found</span>' +
+    '<span class="res-badge">' + solutions.length + (solutions.length >= 50 ? '+' : '') + '</span></div>';
+
+  solutions.forEach(function(sol, si) {
+    var adds = sol.filter(function(s){ return s.sign === 1; }).length;
+    var subs = sol.filter(function(s){ return s.sign === -1; }).length;
+    var eq = '';
+    sol.forEach(function(s, i) {
+      if (i > 0) eq += '<span class="eo">' + (s.sign === 1 ? '+' : '−') + '</span>';
+      else if (s.sign === -1) eq += '<span class="eo">−</span>';
+      eq += '<span class="en ' + (s.sign === 1 ? 'p' : 'n') + '">' + fmt(Math.abs(parsedNumbers[s.index])) + '</span>';
+    });
+    eq += '<span class="ee">=</span><span class="et">' + fmt(target) + '</span>';
+    var hasRng = sourceAddress !== '';
+    html += '<div class="sol" style="animation-delay:' + (si*0.04) + 's">' +
+      '<div class="sol-hd"><span class="sol-num">Combination ' + (si+1) + '</span>' +
+      '<div class="sol-chips">' +
+      (adds ? '<span class="chip a">+' + adds + ' added</span>' : '') +
+      (subs ? '<span class="chip s">−' + subs + ' subtracted</span>' : '') +
+      '<span class="chip c">' + sol.length + ' entries</span></div></div>' +
+      '<div class="sol-bd"><div class="eq">' + eq + '</div>' +
+      '<div class="act-row">' +
+      (hasRng ? '<button class="act prim" onclick="highlightCells(' + si + ')">Highlight in Excel</button>' : '') +
+      (hasRng ? '<button class="act sec" onclick="filterRows(' + si + ')">Filter rows</button>' : '') +
+      '</div></div></div>';
+  });
+  el.innerHTML = html;
+}
+
+// ── Get row indices for a solution ───────────────────────────────
+function getSolIndices(si) {
+  return lastResults.solutions[si].map(function(s){ return s.index; });
+}
+
+// ── Highlight ────────────────────────────────────────────────────
+function highlightCells(si) {
+  if (sourceRowStart < 0) return;
+  var matchSet = {};
+  getSolIndices(si).forEach(function(i){ matchSet[i] = true; });
+  Excel.run(function(ctx) {
+    var sheet = ctx.workbook.worksheets.getActiveWorksheet();
+    // Clear existing fills
+    sheet.getRangeByIndexes(sourceRowStart, sourceColIndex, sourceRowCount, 1).format.fill.clear();
+    // Apply highlight
+    Object.keys(matchSet).forEach(function(i) {
+      var cell = sheet.getRangeByIndexes(sourceRowStart + parseInt(i), sourceColIndex, 1, 1);
+      cell.format.fill.color = '#dff6dd';
+      cell.format.font.color = '#107c10';
+      cell.format.font.bold  = true;
+    });
+    return ctx.sync();
+  }).catch(function(){ showBan('err', 'Could not highlight cells — make sure the original sheet is active.'); });
+}
+
+// ── Filter rows ──────────────────────────────────────────────────
+function filterRows(si) {
+  if (sourceRowStart < 0) return;
+  var matchSet = {};
+  getSolIndices(si).forEach(function(i){ matchSet[i] = true; });
+  Excel.run(function(ctx) {
+    var sheet = ctx.workbook.worksheets.getActiveWorksheet();
+    var used = sheet.getUsedRange();
+    used.load('rowCount');
+    return ctx.sync().then(function() {
+      // Reset visibility for all rows in used range
+      for (var r = 0; r < used.rowCount; r++) {
+        sheet.getRangeByIndexes(r, 0, 1, 1).rowHidden = false;
+      }
+      return ctx.sync();
+    }).then(function() {
+      // Hide non-matching rows in our source range
+      for (var i = 0; i < sourceRowCount; i++) {
+        if (!matchSet[i]) {
+          sheet.getRangeByIndexes(sourceRowStart + i, 0, 1, 1).rowHidden = true;
+        }
+      }
+      return ctx.sync();
+    });
+  }).then(function() {
+    id('fltBar').classList.add('on');
+    id('fltLbl').textContent = 'Showing ' + Object.keys(matchSet).length + ' of ' + sourceRowCount + ' rows (Combination ' + (si+1) + ')';
+  }).catch(function(){ showBan('err', 'Could not filter rows — make sure the original sheet is active.'); });
+}
+
+// ── Clear filter ─────────────────────────────────────────────────
+function clearFilter() {
+  Excel.run(function(ctx) {
+    var sheet = ctx.workbook.worksheets.getActiveWorksheet();
+    var used = sheet.getUsedRange();
+    used.load('rowCount');
+    return ctx.sync().then(function() {
+      for (var r = 0; r < used.rowCount; r++) {
+        sheet.getRangeByIndexes(r, 0, 1, 1).rowHidden = false;
+      }
+      if (sourceRowStart >= 0) {
+        var rng = sheet.getRangeByIndexes(sourceRowStart, sourceColIndex, sourceRowCount, 1);
+        rng.format.fill.clear();
+        rng.format.font.color = '';
+        rng.format.font.bold = false;
+      }
+      return ctx.sync();
+    });
+  }).then(function() {
+    id('fltBar').classList.remove('on');
+  }).catch(function(){ showBan('err', 'Could not clear filter.'); });
+}
+</script>
+</body>
+</html>
